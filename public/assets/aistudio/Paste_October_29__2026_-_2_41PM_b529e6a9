@@ -1,0 +1,877 @@
+# NOVA AI — ULTIMATE HANDS-FREE ANDROID AI AGENT
+## COMPLETE VOICE CONTROL, PHONE AUTOMATION, VISION, MEMORY AND PERSONAL ASSISTANT SYSTEM
+
+### MASTER IMPLEMENTATION DIRECTIVE
+
+Continue and expand the existing NOVA AI native Android application. Preserve its original premium design, Gemini integration, 16 screens, settings, conversation history, Bengali support and Android Studio project.
+
+Transform NOVA AI into a genuinely functional, hands-free personal AI agent that can understand natural-language commands, plan multi-step tasks, use supported Android capabilities, operate compatible apps, verify results and report failures honestly.
+
+Do not create a fake AI demonstration, static interface, website-only implementation or simulated phone control.
+
+**Core principle:** Every advertised capability must have a real implementation, required permissions, proper error handling and a test procedure. If a capability is unavailable on the device, explain why and provide the closest supported alternative.
+
+---
+
+# MODULE 1 — FULL HANDS-FREE VOICE INTERACTION
+
+Implement an optional hands-free mode so the user does not need to touch the phone for every command.
+
+Required features:
+
+1. Wake-word detection using a configurable phrase, such as “Hey Nova”.
+2. Voice commands in Bengali, Banglish, English and Hindi.
+3. Continuous multi-turn conversations.
+4. Automatic speech recognition, intent detection, action execution and spoken confirmation.
+5. Configurable listening timeout and conversation timeout.
+6. Automatic transition between listening, thinking, acting and speaking.
+7. Interrupt the assistant by saying “Stop”, “Cancel” or “থামো”.
+8. Allow the user to ask follow-up questions without repeating the wake word during an active conversation.
+9. Support a configurable quiet mode and do-not-disturb behavior.
+10. Resume hands-free mode only according to the user's saved preferences and Android's permitted lifecycle behavior.
+
+Example conversation:
+
+User: “Hey Nova, YouTube খোলো।”
+
+NOVA: “YouTube খুলছি।”
+
+User: “বাংলা গান সার্চ করো।”
+
+NOVA: Opens YouTube and performs the supported search action.
+
+User: “প্রথম ভিডিওটা চালাও।”
+
+NOVA: Performs the supported action and verifies the result when possible.
+
+User: “এখন বন্ধ করো।”
+
+NOVA: Stops its own active speech or task, and stops media playback only when it has an authorized, supported way to do so.
+
+### Wake-word implementation
+
+- Investigate an on-device wake-word engine suitable for Android.
+- Prefer offline wake-word detection where technically feasible.
+- Do not send continuous microphone audio to Gemini merely to detect the wake word.
+- Do not claim that ordinary Android SpeechRecognizer provides a reliable always-listening wake-word service.
+- Implement a user-controlled foreground microphone service when required.
+- Display a persistent Android notification while the microphone service is active.
+- Respect microphone privacy indicators, battery optimization, background execution limits and device-specific restrictions.
+- Stop listening immediately when the user disables hands-free mode.
+- Do not secretly record conversations or upload raw audio without clear disclosure and consent.
+- If reliable wake-word operation is unavailable, provide a functional push-to-talk or notification-based alternative.
+
+Settings must include wake word, listening mode, language, timeout, sensitivity where supported, startup behavior and battery usage guidance.
+
+---
+
+# MODULE 2 — UNIVERSAL VOICE COMMAND ENGINE
+
+Build a centralized command-processing engine rather than hardcoding individual phrases.
+
+Pipeline:
+
+Voice input → speech recognition → language normalization → intent detection → entity extraction → permission validation → action planning → execution → result verification → spoken response.
+
+Understand equivalent commands in different languages.
+
+Examples:
+
+- “Open YouTube.”
+- “ইউটিউব খোলো।”
+- “YouTube খুলে বাংলা গান সার্চ করো।”
+- “আমার Wi-Fi সেটিংস খোলো।”
+- “আজকের আবহাওয়া বলো।”
+- “এই লেখাটা কপি করে দাও।”
+- “আমাকে পাঁচ মিনিট পরে মনে করিয়ে দিও।”
+
+Implement:
+
+- Intent classification.
+- Entity and parameter extraction.
+- Context-aware command interpretation.
+- Multi-step task planning.
+- Ambiguity detection.
+- Clarifying questions when needed.
+- Action dependency management.
+- Timeouts and cancellation.
+- Retry policies for recoverable errors.
+- Idempotency protection against duplicate actions.
+- Execution logs without sensitive content.
+- Accurate completion status.
+- A fallback to ordinary Gemini conversation when no action is appropriate.
+
+Use structured action objects internally. Never execute arbitrary generated code, shell commands or unrestricted AI-generated instructions merely because the model returned them.
+
+The AI may propose an action, but a deterministic action dispatcher must validate and execute it against a predefined, permission-aware tool registry.
+
+---
+
+# MODULE 3 — REAL ANDROID PHONE CONTROL
+
+Implement the maximum practical native Android control features supported by public APIs and explicit user permissions.
+
+### Application management
+
+Support:
+
+- Open installed applications.
+- Open an app by name or recognized package.
+- Launch supported activities through Android intents.
+- Open an app's settings page.
+- Open supported links in the appropriate app.
+- Return to NOVA AI.
+- Display recently executed NOVA tasks.
+- Check whether an application can be launched.
+- Explain when an app is missing or does not expose the required action.
+
+Example commands:
+
+- “Open Chrome.”
+- “Facebook খোলো।”
+- “Open YouTube and search for Python tutorials.”
+- “Settings খুলে Bluetooth অপশন দেখাও।”
+
+Use PackageManager and supported Android intents. Handle package visibility restrictions and unavailable activities properly.
+
+### System settings
+
+Support opening the appropriate settings panels for:
+
+- Wi-Fi.
+- Bluetooth.
+- Display brightness.
+- Sound.
+- Volume.
+- Battery.
+- Battery optimization.
+- Notifications.
+- App permissions.
+- Location settings.
+- Language and keyboard settings.
+- Accessibility settings.
+- Default assistant settings where available.
+
+Where Android provides an approved direct API or user-authorized control, implement it. Otherwise, open the corresponding system settings panel and guide the user.
+
+Do not promise that an ordinary application can silently change every system setting.
+
+Never bypass Android's permission system, lock screen, secure settings restrictions or device-owner policies.
+
+### Device information
+
+Where accessible through supported APIs, answer questions about:
+
+- Battery percentage and charging state.
+- Available storage.
+- App version.
+- Network connectivity.
+- Current date and time.
+- Device language.
+- NOVA AI's granted permissions.
+- Current task status.
+
+Do not collect or expose unrelated personal information.
+
+---
+
+# MODULE 4 — ACCESSIBILITY-BASED UI AUTOMATION
+
+Implement an optional accessibility automation module for user-authorized interactions with compatible applications.
+
+Use Android AccessibilityService only when the user explicitly enables the service through Android Settings.
+
+Possible capabilities, subject to app compatibility:
+
+- Inspect accessible UI element labels and roles.
+- Find a button or text field by accessible description.
+- Tap an accessible element.
+- Enter text into a selected field.
+- Scroll accessible content.
+- Navigate between supported screens.
+- Read relevant on-screen text aloud.
+- Check whether a requested UI element is present.
+- Stop an automation sequence when an expected state is not reached.
+- Return control to the user when automation becomes uncertain.
+
+Example:
+
+User: “Chrome খুলে OpenAI website খোলো।”
+
+NOVA:
+
+1. Launches Chrome using a supported intent.
+2. Uses an appropriate navigation mechanism to open the requested site.
+3. Checks the resulting state when available.
+4. Reports whether the page opened successfully.
+
+Example:
+
+User: “এই পেজের লেখাটা পড়ে শোনাও।”
+
+NOVA:
+
+1. Requests only the accessibility information needed for the task.
+2. Extracts available accessible text.
+3. Summarizes or reads the content.
+4. Makes it clear when content cannot be accessed.
+
+### Automation safeguards
+
+- Never enable AccessibilityService programmatically or without the user's explicit action.
+- Provide a dedicated explanation and setup guide.
+- Restrict actions to the user's requested task.
+- Do not defeat CAPTCHAs, security challenges, anti-bot systems or app access controls.
+- Do not collect passwords, OTPs, authentication tokens or payment credentials.
+- Do not read private screen content unnecessarily.
+- Do not automatically approve permission dialogs or security warnings.
+- Pause before irreversible actions.
+- Avoid repeated blind tapping.
+- Require a fresh state check after navigation or a major UI change.
+- Respect sensitive-window protections and apps that intentionally block accessibility inspection.
+- Provide an immediate Stop Automation control.
+
+Accessibility is not a universal remote-control API. Apps may block automation, change their layouts or expose insufficient accessibility information. Use official intents, app integrations and public APIs first.
+
+---
+
+# MODULE 5 — MULTI-STEP TASK AUTOMATION AGENT
+
+Implement a task planner capable of breaking natural-language requests into a sequence of validated actions.
+
+Example request:
+
+“Nova, YouTube খোলো, বাংলা programming tutorial সার্চ করো, তারপর আমাকে বলো কোন ভিডিওটি প্রথমে এসেছে।”
+
+The task planner should:
+
+1. Parse the user's request.
+2. Identify the target application and search query.
+3. Create a bounded execution plan.
+4. Launch YouTube or use a supported alternative.
+5. Perform the search through an authorized mechanism.
+6. Read the first result only if the information is accessible.
+7. Report the actual result.
+8. Ask the user for assistance if the expected state cannot be verified.
+
+Implement task states:
+
+- CREATED
+- PLANNING
+- AWAITING_PERMISSION
+- AWAITING_CONFIRMATION
+- EXECUTING
+- VERIFYING
+- COMPLETED
+- FAILED
+- CANCELLED
+
+Each action must have:
+
+- Unique action ID.
+- Action type.
+- Validated parameters.
+- Required permissions.
+- Timeout.
+- Retry policy.
+- Expected result.
+- Verification rule.
+- Failure message.
+- Cancellation behavior.
+
+Support task pause, resume where safe, retry and cancellation.
+
+Never report a task as complete simply because an intent was launched or a tap was attempted.
+
+Do not let the AI create an infinite action loop. Apply step limits, execution timeouts, resource limits and a maximum retry count.
+
+For destructive or sensitive operations, ask for explicit confirmation immediately before execution.
+
+---
+
+# MODULE 6 — FLOATING NOVA OVERLAY
+
+Create an optional floating assistant interface that remains accessible while the user uses other applications.
+
+Design:
+
+- Small draggable NOVA orb.
+- Expandable floating panel.
+- Microphone button.
+- Listening indicator.
+- Live recognized-text preview.
+- Spoken-response indicator.
+- Stop and cancel buttons.
+- Quick command shortcuts.
+- Minimize and close controls.
+- Adjustable size and opacity.
+- Position persistence.
+- Dark purple-blue visual identity.
+
+Requirements:
+
+- Use Android's supported overlay mechanism.
+- Request the appropriate draw-over-other-apps permission through Android Settings when necessary.
+- Never grant permissions automatically.
+- Use a foreground service only when appropriate and legally permitted.
+- Follow foreground-service type and notification requirements.
+- Do not obscure password fields, payment screens or security dialogs.
+- Avoid capturing other applications' private content without explicit, appropriate authorization.
+- Release overlay resources when disabled.
+- Handle orientation changes, screen locking and process termination.
+
+If overlay permission is denied, the normal NOVA AI interface must remain usable.
+
+---
+
+# MODULE 7 — SCREEN UNDERSTANDING AND VISUAL ASSISTANCE
+
+Implement a user-initiated screen understanding feature.
+
+The user may say:
+
+- “Nova, screen-e ki ache bolo.”
+- “এই পেজটা সংক্ষেপে বুঝিয়ে দাও।”
+- “এই error message-এর মানে কী?”
+- “এই স্ক্রিনে কোথায় Settings আছে?”
+
+Use supported options in this order:
+
+1. Accessibility node information where appropriate.
+2. App-provided content or official integrations.
+3. User-initiated Android screen capture using the appropriate consent flow.
+4. OCR or image understanding for content the user has permission to share.
+
+If using MediaProjection:
+
+- Obtain the required user consent.
+- Follow Android's foreground-service and media-projection requirements.
+- Show an unmistakable indication when screen capture is active.
+- Stop capture when the user ends the session.
+- Do not secretly capture the screen in the background.
+- Avoid storing screenshots unless the user explicitly requests it.
+- Exclude sensitive content whenever practical.
+
+For screen actions, locate accessible controls, check their current state and ask for clarification if multiple targets match.
+
+Do not claim to see the complete screen if the relevant content is inaccessible.
+
+---
+
+# MODULE 8 — COMMUNICATION AND MESSAGING
+
+Implement supported communication workflows.
+
+### Phone and contacts
+
+Where permissions and APIs allow:
+
+- Search contacts.
+- Display a selected contact.
+- Open the dialer with a chosen number.
+- Initiate a call through an authorized Android flow.
+- Open the SMS application with a recipient and draft message.
+- Open supported messaging apps.
+- Prepare an email draft.
+- Read back the recipient and message before sending when confirmation is required.
+
+Example:
+
+User: “আমার বন্ধুকে একটা মেসেজ লিখে দাও, আমি দশ মিনিট পরে আসব।”
+
+NOVA:
+
+1. Clarifies the recipient if needed.
+2. Prepares the message.
+3. Reads it aloud.
+4. Opens the supported messaging interface.
+5. Requests confirmation before sending when required.
+6. Reports the actual outcome.
+
+Never claim that a message was delivered merely because a compose screen opened.
+
+Do not silently send messages, make paid calls, mass-message contacts or access communications without authorization.
+
+Do not circumvent SMS, call-log, contacts or default-handler restrictions.
+
+### Email and calendar
+
+Implement:
+
+- Compose an email.
+- Read back recipient, subject and body.
+- Open a supported email compose interface.
+- Create reminders.
+- Prepare calendar events.
+- Ask for missing date, time, recipient or event details.
+- Request confirmation before creating or sending sensitive items when appropriate.
+- Verify results using an authorized API or available app response.
+
+Prefer official provider integrations when available and authorized.
+
+---
+
+# MODULE 9 — WEB SEARCH, YOUTUBE AND INFORMATION RETRIEVAL
+
+Build a real information retrieval layer for current information and supported app actions.
+
+Capabilities:
+
+- Search the web.
+- Open requested websites.
+- Summarize accessible web pages.
+- Search YouTube.
+- Open a specific supported video or search results.
+- Explain articles and documents the user provides.
+- Compare information from multiple sources.
+- Provide citations or source links when available.
+- Distinguish current facts from model knowledge.
+- State when a source could not be retrieved.
+
+Example commands:
+
+- “আজকের প্রযুক্তির খবর বলো।”
+- “YouTube-এ Python course খুঁজে দাও।”
+- “এই website-টা খুলে দাও।”
+- “বাংলায় এই article-এর summary বলো।”
+- “দুটি phone-এর feature compare করো।”
+
+Use a genuine search provider or authorized search API. Do not invent search results or fabricate citations.
+
+When interacting with websites, follow their access restrictions, privacy requirements and terms. Never bypass login requirements or access controls.
+
+If live web access is unavailable, explain the limitation and offer a supported alternative.
+
+---
+
+# MODULE 10 — SMARTPHONE PRODUCTIVITY TOOLKIT
+
+Create real tools for common personal tasks.
+
+### Notes and memory
+
+- Create a note by voice.
+- Search saved notes.
+- Read a selected note aloud.
+- Update or delete a selected note after confirmation.
+- Save a task or checklist.
+- Search conversation history.
+- Remember user-approved preferences.
+
+Example:
+
+“Nova, মনে রাখো আমি সব উত্তর বাংলায় চাই।”
+
+Save this preference only through the app's explicit memory mechanism and allow the user to edit or delete it.
+
+### Reminders and timers
+
+- Set a timer.
+- Create a reminder.
+- Schedule a supported notification.
+- List upcoming reminders.
+- Cancel a selected reminder.
+- Confirm the date and time when ambiguous.
+- Handle reboot, notification permission and battery restrictions where applicable.
+
+### Calculator and conversion
+
+- Basic arithmetic.
+- Percentage calculation.
+- Unit conversion.
+- Date calculations.
+- Simple financial calculations.
+- Read the answer aloud.
+
+Use deterministic code for arithmetic rather than relying on an LLM to calculate every result.
+
+### Files and documents
+
+Where Android's Storage Access Framework and permissions allow:
+
+- Search user-selected files.
+- Open supported documents.
+- Read supported text and document formats.
+- Summarize a selected document.
+- Create text notes.
+- Prepare a document for export.
+- Ask before overwriting or deleting files.
+
+Never scan private storage indiscriminately or claim access to files the user has not made available.
+
+---
+
+# MODULE 11 — OFFLINE MODE AND CONNECTIVITY
+
+Implement a useful offline fallback.
+
+Offline features may include:
+
+- On-device wake-word detection when supported.
+- Available offline speech recognition.
+- Basic commands with deterministic implementations.
+- Local notes and reminders.
+- Calculator and supported conversions.
+- Local settings and conversation history.
+- Simple device information.
+- Text-to-speech using installed offline voice data when available.
+
+Online features may include:
+
+- Gemini responses.
+- Current web searches.
+- Cloud-based speech recognition.
+- Online document or image analysis.
+- Connected service integrations.
+
+Requirements:
+
+- Detect network availability.
+- Distinguish offline features from online features.
+- Do not pretend a cloud AI request succeeded offline.
+- Queue only appropriate, non-sensitive operations.
+- Do not automatically execute a queued sensitive action later without renewed confirmation.
+- Resume recoverable tasks after connectivity returns when safe.
+- Explain missing offline language packs or models.
+
+Never claim complete offline intelligence unless the necessary models and capabilities are actually installed.
+
+---
+
+# MODULE 12 — ADVANCED CONVERSATION AND PERSONAL MEMORY
+
+Build a persistent, editable memory system.
+
+Memory categories:
+
+1. User-approved preferences.
+2. Preferred language and speech settings.
+3. User-created notes.
+4. Explicitly saved facts.
+5. Task history.
+6. Conversation history.
+7. Optional project context.
+
+Implement:
+
+- Search memory.
+- Update a memory.
+- Delete a selected memory.
+- Clear conversation history.
+- Export user-owned data where practical.
+- Control whether new conversations are saved.
+- Show what information is stored.
+- Avoid saving passwords, OTPs or other secrets.
+- Avoid treating every statement as a permanent preference.
+- Ask before storing sensitive or ambiguous personal information.
+
+Use Room for structured local records and DataStore for settings. Protect sensitive data using appropriate Android security facilities when needed.
+
+The assistant must distinguish between:
+
+- Information in the current conversation.
+- Previously saved user-approved memory.
+- Retrieved external information.
+- Inferences that may be incorrect.
+
+Never invent memories or claim that a task happened if no verified record exists.
+
+---
+
+# MODULE 13 — PROACTIVE ASSISTANCE AND CONTEXT
+
+Provide optional, user-controlled proactive features.
+
+Examples:
+
+- Remind the user about a scheduled task.
+- Summarize saved reminders on request.
+- Offer to continue an unfinished task.
+- Suggest a shortcut for a frequently repeated command.
+- Notify the user when a specifically requested background task finishes.
+- Provide a daily summary if the user configures a schedule.
+
+Requirements:
+
+- Make proactive features opt-in.
+- Use Android notifications and supported scheduling APIs.
+- Respect quiet hours.
+- Provide controls to disable notifications.
+- Do not continuously monitor unrelated app activity.
+- Do not infer private behavior from screen content without an appropriate, explicit feature and consent.
+- Never perform sensitive transactions proactively.
+- Do not claim to run indefinitely if Android may stop the process.
+
+---
+
+# MODULE 14 — SAFE ACTION PERMISSIONS AND CONFIRMATION
+
+Create an Action Permission Manager.
+
+### Low-risk actions
+
+These may run without repeated confirmation after the user has configured the relevant feature:
+
+- Answering questions.
+- Opening a public website.
+- Starting an ordinary app.
+- Reading an explicitly selected note.
+- Running a calculation.
+- Creating a draft.
+- Reading a response aloud.
+
+### Actions that require appropriate confirmation
+
+Depending on the action and Android API:
+
+- Sending a message or email.
+- Making a phone call.
+- Deleting files or notes.
+- Changing an important setting.
+- Sharing personal data.
+- Uploading a document.
+- Making a purchase or payment.
+- Publishing content.
+- Executing an external action with significant consequences.
+
+### Always respect security boundaries
+
+- Never bypass the device lock screen.
+- Never extract passwords, OTPs or authentication tokens.
+- Never bypass app authentication or payment confirmation.
+- Never secretly record or transmit microphone or screen data.
+- Never execute arbitrary shell commands as a privileged user.
+- Never disable security software or device protections without a legitimate, supported, explicitly authorized workflow.
+- Never allow external content or a web page to override the user's permissions or the app's safety rules.
+
+Provide an immediate emergency command:
+
+“Nova, stop everything.”
+
+This must cancel pending tasks, stop NOVA's speech, stop its own active recognition where possible and halt further automation actions.
+
+---
+
+# MODULE 15 — ACCESSIBILITY AND INCLUSIVE VOICE CONTROL
+
+Design the application for people who prefer or need hands-free operation.
+
+Include:
+
+- Full spoken navigation.
+- Bengali and English speech output.
+- Large text support.
+- Screen-reader-compatible controls.
+- Clear audio feedback.
+- Accessible focus order.
+- High-contrast mode.
+- Reduced-motion support.
+- Voice-based error recovery.
+- A clear way to request help.
+- Touch alternatives for every critical voice action.
+
+Provide spoken status updates such as:
+
+- “শুনছি।”
+- “একটু ভাবছি।”
+- “কাজটি সম্পন্ন হয়েছে।”
+- “অনুমতি প্রয়োজন।”
+- “কাজটি সম্পন্ন করতে পারিনি।”
+- “আমি বুঝতে পারিনি। আবার বলবেন?”
+
+Do not rely only on colors or animations to communicate status.
+
+---
+
+# MODULE 16 — REQUIRED USER INTERFACE ADDITIONS
+
+Preserve the existing NOVA AI design system and add these functional screens:
+
+1. Hands-Free Control Center.
+2. Wake-Word Setup.
+3. Floating Assistant Settings.
+4. Accessibility Automation Setup.
+5. Screen Understanding and Consent.
+6. Task Planner and Execution Monitor.
+7. App and Action Permissions.
+8. Memory Manager.
+9. Reminders and Scheduled Tasks.
+10. Offline Capability Center.
+11. Automation History.
+12. Privacy and Data Controls.
+
+### Hands-Free Control Center
+
+Display:
+
+- Hands-free mode status.
+- Wake-word status.
+- Microphone permission.
+- Accessibility status.
+- Overlay status.
+- Speech recognition availability.
+- Text-to-speech availability.
+- Internet connectivity.
+- Current task.
+- Stop-all button.
+- Links to the appropriate setup pages.
+
+Every status must reflect the actual system state.
+
+Do not show “Wake word active,” “Screen access enabled,” or “Connected” unless that state has been verified.
+
+---
+
+# MODULE 17 — TECHNICAL ARCHITECTURE
+
+Extend the original Kotlin, Jetpack Compose, MVVM, Room, DataStore and Gemini architecture.
+
+Add modular components such as:
+
+- `WakeWordManager`
+- `HandsFreeService`
+- `SpeechRecognitionManager`
+- `TextToSpeechManager`
+- `VoiceCommandParser`
+- `IntentClassifier`
+- `ActionRegistry`
+- `ActionPermissionManager`
+- `TaskPlanner`
+- `TaskExecutor`
+- `TaskVerifier`
+- `AutomationAccessibilityService`
+- `OverlayAssistantService`
+- `ScreenCaptureManager`
+- `ScreenUnderstandingRepository`
+- `WebSearchRepository`
+- `ReminderRepository`
+- `MemoryRepository`
+- `DeviceCapabilityRepository`
+- `AutomationHistoryRepository`
+
+These are architectural suggestions. Adapt names and files to the actual implementation rather than creating empty placeholder classes.
+
+Use:
+
+- Coroutines and Flow.
+- Lifecycle-aware state management.
+- Structured concurrency.
+- Cancellation tokens or coroutine cancellation.
+- Explicit action schemas.
+- Strict parameter validation.
+- Bounded execution queues.
+- Secure local storage where appropriate.
+- Proper foreground-service handling.
+- Android permission contracts.
+- Unit tests and integration tests.
+- Dependency injection where useful.
+
+Do not block the main thread. Do not run indefinite background loops without a justified, supported design.
+
+---
+
+# MODULE 18 — TESTING AND REAL-DEVICE VERIFICATION
+
+Create a device test plan for a real Android phone.
+
+Test the following:
+
+1. Wake-word activation.
+2. Hands-free mode activation and shutdown.
+3. Bengali and Banglish command recognition.
+4. English command recognition.
+5. Follow-up commands.
+6. Application launching.
+7. Web and YouTube navigation.
+8. Permission denial and recovery.
+9. Accessibility-service setup and removal.
+10. Overlay permission granted and denied.
+11. Screen-capture consent and cancellation.
+12. Text-to-speech interruption.
+13. Network loss during a task.
+14. Gemini quota and authentication errors.
+15. Multi-step task cancellation.
+16. Duplicate command prevention.
+17. Background and foreground transitions.
+18. Battery optimization effects.
+19. Android reboot behavior.
+20. Sensitive action confirmation.
+21. Memory editing and deletion.
+22. Offline fallback.
+23. Notification delivery.
+24. Emergency stop.
+25. App crash recovery.
+
+For each test, record:
+
+- Expected result.
+- Actual result.
+- Android version.
+- Required permissions.
+- Pass or fail.
+- Known limitation.
+
+Do not claim a test passed without running it on an appropriate environment.
+
+---
+
+# MODULE 19 — IMPLEMENTATION PRIORITY
+
+Build the complete system in working stages.
+
+**Priority 1:** Existing NOVA AI application, real Gemini responses, speech recognition and speech output.
+
+**Priority 2:** Hands-free conversation, foreground service, user-controlled wake-word detection and reliable cancellation.
+
+**Priority 3:** App launching, system settings, reminders, calculator and deterministic voice commands.
+
+**Priority 4:** Floating overlay and explicitly enabled accessibility-based automation.
+
+**Priority 5:** Multi-step task planning, state verification and safe retries.
+
+**Priority 6:** Screen understanding, OCR, supported web integrations and document assistance.
+
+**Priority 7:** Persistent editable memory, offline features, productivity tools and proactive notifications.
+
+**Priority 8:** Comprehensive tests, battery optimization, privacy review, crash handling and production build.
+
+Do not generate every feature as a nonfunctional placeholder simply to claim that all modules exist.
+
+If a feature needs a separate service, model, permission, API or user configuration, implement the integration points and explain the exact remaining requirement.
+
+---
+
+# MODULE 20 — FINAL DELIVERABLES
+
+Deliver:
+
+1. Complete integrated native Android project.
+2. Full source code and file structure.
+3. All required Gradle configurations.
+4. AndroidManifest permissions and service declarations.
+5. Functional UI screens and navigation.
+6. Gemini integration with secure configuration guidance.
+7. Hands-free speech and wake-word implementation where supported.
+8. Floating overlay implementation.
+9. Accessibility automation implementation and user setup instructions.
+10. Task planner, action registry and verification engine.
+11. Memory and reminder system.
+12. Offline capability handling.
+13. Unit and integration tests.
+14. Android Studio build instructions.
+15. APK generation instructions.
+16. Real-device testing checklist.
+17. Troubleshooting guide.
+18. Privacy and permission documentation.
+19. List of verified features.
+20. List of incomplete features and platform limitations.
+
+Do not fabricate source files, API responses, successful builds, test results or APK download links.
+
+### FINAL GOAL
+
+Create NOVA AI as a premium, Bengali-first, hands-free personal Android AI agent that can listen when appropriately enabled, understand natural-language requests, speak naturally, open supported apps, perform authorized phone actions, automate compatible interfaces, understand user-provided screen content, manage tasks and memory, and verify the results of its work.
+
+The assistant should minimize the need to touch the phone while remaining transparent, secure, interruptible and reliable.
+
+**The standard is real execution, not promises. Implement the maximum capabilities supported by Android and clearly identify anything that cannot be performed on the target device.**

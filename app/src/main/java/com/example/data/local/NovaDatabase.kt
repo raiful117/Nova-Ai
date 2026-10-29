@@ -1,0 +1,41 @@
+package com.example.data.local
+
+import android.content.Context
+import androidx.room.Database
+import androidx.room.Room
+import androidx.room.RoomDatabase
+
+@Database(
+    entities = [
+        ConversationEntity::class,
+        MemoryEntity::class,
+        ReminderEntity::class,
+        TaskExecutionEntity::class
+    ],
+    version = 1,
+    exportSchema = false
+)
+abstract class NovaDatabase : RoomDatabase() {
+    abstract fun conversationDao(): ConversationDao
+    abstract fun memoryDao(): MemoryDao
+    abstract fun reminderDao(): ReminderDao
+    abstract fun taskDao(): TaskDao
+
+    companion object {
+        @Volatile
+        private var INSTANCE: NovaDatabase? = null
+
+        fun getDatabase(context: Context): NovaDatabase {
+            return INSTANCE ?: synchronized(this) {
+                val instance = Room.databaseBuilder(
+                    context.applicationContext,
+                    NovaDatabase::class.java,
+                    "nova_ai_database"
+                ).fallbackToDestructiveMigration()
+                    .build()
+                INSTANCE = instance
+                instance
+            }
+        }
+    }
+}

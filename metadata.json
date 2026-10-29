@@ -1,0 +1,8 @@
+{
+  "name": "NOVA AI",
+  "description": "Personal Voice Assistant with Gemini AI, Hands-Free Voice Control, Phone Automation & Memory.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

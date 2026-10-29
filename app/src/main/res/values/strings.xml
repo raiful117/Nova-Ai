@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">NOVA AI</string>
+    <string name="app_subtitle">Your Personal Voice Assistant</string>
+    <string name="accessibility_service_description">Enables NOVA AI to assist you with voice navigation and reading accessible screen content on supported apps.</string>
+</resources>
