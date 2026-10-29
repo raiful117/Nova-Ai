@@ -17,14 +17,20 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.filled.Psychology
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.VpnKey
@@ -60,6 +66,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.network.gemini.GeminiModelCatalog
+import com.example.data.network.gemini.GeminiModelInfo
 import com.example.ui.NovaMainViewModel
 import com.example.ui.theme.NovaBorder
 import com.example.ui.theme.NovaCyanGlow
@@ -70,6 +78,7 @@ import com.example.ui.theme.NovaNearBlack
 import com.example.ui.theme.NovaSuccess
 import com.example.ui.theme.NovaSurface
 import com.example.ui.theme.NovaSurfaceElevated
+import com.example.ui.theme.NovaSurfaceVariant
 import com.example.ui.theme.NovaTextPrimary
 import com.example.ui.theme.NovaTextSecondary
 
@@ -87,6 +96,8 @@ fun ApiKeySetupScreen(
     var inputKey by remember(userPrefs.apiKey) { mutableStateOf(userPrefs.apiKey) }
     var isPasswordVisible by remember { mutableStateOf(false) }
     var saveSuccessNotice by remember { mutableStateOf(false) }
+    var customModelInput by remember { mutableStateOf("") }
+    var showCustomModelInput by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -211,7 +222,7 @@ fun ApiKeySetupScreen(
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     OutlinedButton(
-                        onClick = { viewModel.testApiConnection(inputKey) },
+                        onClick = { viewModel.testApiConnection(inputKey, userPrefs.selectedGeminiModel) },
                         modifier = Modifier
                             .weight(1f)
                             .height(48.dp)
@@ -320,6 +331,219 @@ fun ApiKeySetupScreen(
                 color = NovaSuccess,
                 style = MaterialTheme.typography.bodyMedium
             )
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Gemini Model Architecture Selection Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = NovaSurface),
+            border = androidx.compose.foundation.BorderStroke(1.dp, NovaBorder)
+        ) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Psychology,
+                        contentDescription = "Gemini Models",
+                        tint = NovaCyanGlow,
+                        modifier = Modifier.size(26.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = "Select Gemini AI Model",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = NovaTextPrimary
+                        )
+                        Text(
+                            text = "All Gemini models are natively supported. Switch dynamically anytime.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = NovaTextSecondary
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Models list
+                GeminiModelCatalog.AVAILABLE_MODELS.forEach { modelInfo ->
+                    val isSelected = userPrefs.selectedGeminiModel.equals(modelInfo.id, ignoreCase = true)
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 5.dp)
+                            .clickable { viewModel.setSelectedGeminiModel(modelInfo.id) }
+                            .testTag("model_item_${modelInfo.id}"),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isSelected) NovaSurfaceElevated else NovaSurfaceVariant.copy(alpha = 0.5f)
+                        ),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            if (isSelected) NovaCyanGlow else Color.Transparent
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = modelInfo.displayName,
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = if (isSelected) NovaCyanGlow else NovaTextPrimary
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    // Badge tag
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(
+                                                when {
+                                                    modelInfo.tag.contains("Recommended") -> NovaElectricPurple.copy(alpha = 0.35f)
+                                                    modelInfo.tag.contains("Pro") -> NovaElectricPurple.copy(alpha = 0.5f)
+                                                    modelInfo.tag.contains("Ultra") -> NovaCyanGlow.copy(alpha = 0.25f)
+                                                    modelInfo.tag.contains("Battery") -> NovaSuccess.copy(alpha = 0.25f)
+                                                    else -> NovaBorder
+                                                }
+                                            )
+                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    ) {
+                                        Text(
+                                            text = modelInfo.tag,
+                                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                                            color = when {
+                                                modelInfo.tag.contains("Battery") -> NovaSuccess
+                                                modelInfo.tag.contains("Ultra") -> NovaCyanGlow
+                                                else -> Color.White
+                                            }
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = modelInfo.description,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = NovaTextSecondary,
+                                    lineHeight = 18.sp
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = "Context: ${modelInfo.contextWindow}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = NovaTextSecondary.copy(alpha = 0.8f)
+                                    )
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Text(
+                                        text = "• ${modelInfo.bestFor}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = NovaCyanGlow.copy(alpha = 0.9f)
+                                    )
+                                }
+                            }
+
+                            if (isSelected) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(28.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(NovaCyanGlow.copy(alpha = 0.2f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = "Selected",
+                                        tint = NovaCyanGlow,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Custom Model identifier section
+                Spacer(modifier = Modifier.height(10.dp))
+                if (!showCustomModelInput) {
+                    TextButton(
+                        onClick = { showCustomModelInput = true },
+                        modifier = Modifier.testTag("toggle_custom_model_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = null,
+                            tint = NovaCyanGlow,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Enter Custom Model Identifier...", color = NovaCyanGlow, style = MaterialTheme.typography.labelMedium)
+                    }
+                } else {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 6.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = NovaSurfaceVariant.copy(alpha = 0.7f)),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, NovaBorder)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                text = "Custom Model Identifier",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                color = NovaTextPrimary
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            OutlinedTextField(
+                                value = customModelInput,
+                                onValueChange = { customModelInput = it },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("custom_model_input_field"),
+                                placeholder = { Text("e.g. gemini-2.0-pro-exp-02-05", color = NovaTextSecondary.copy(alpha = 0.6f)) },
+                                singleLine = true,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = NovaCyanGlow,
+                                    unfocusedBorderColor = NovaBorder,
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White
+                                ),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                TextButton(onClick = { showCustomModelInput = false }) {
+                                    Text("Cancel", color = NovaTextSecondary)
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Button(
+                                    onClick = {
+                                        if (customModelInput.isNotBlank()) {
+                                            viewModel.setSelectedGeminiModel(customModelInput.trim())
+                                            showCustomModelInput = false
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = NovaElectricPurple),
+                                    shape = RoundedCornerShape(8.dp),
+                                    enabled = customModelInput.isNotBlank()
+                                ) {
+                                    Text("Apply Custom Model", color = Color.White)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         Spacer(modifier = Modifier.height(24.dp))

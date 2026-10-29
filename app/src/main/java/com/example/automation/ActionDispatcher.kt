@@ -5,18 +5,24 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraManager
+import android.media.AudioManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.BatteryManager
 import android.os.Environment
 import android.os.StatFs
+import android.provider.AlarmClock
 import android.provider.MediaStore
 import android.provider.Settings
+import android.view.KeyEvent
 import com.example.data.local.MemoryEntity
 import com.example.data.local.NovaDatabase
 import com.example.data.local.ReminderEntity
 import com.example.receiver.ReminderAlarmReceiver
+import com.example.util.BatteryOptimizationManager
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -24,6 +30,13 @@ import java.util.Locale
 class ActionDispatcher(private val context: Context) {
 
     private val database = NovaDatabase.getDatabase(context)
+    private val batteryOptManager = BatteryOptimizationManager(context)
+    private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+    private val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as? CameraManager
+
+    companion object {
+        private var isFlashlightOn = false
+    }
 
     fun launchApp(appName: String, packageName: String?): ActionResult {
         return try {
@@ -40,6 +53,9 @@ class ActionDispatcher(private val context: Context) {
                     "camera" -> Intent(MediaStore.ACTION_IMAGE_CAPTURE)
                     "youtube" -> Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com"))
                     "chrome" -> Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com"))
+                    "whatsapp" -> pm.getLaunchIntentForPackage("com.whatsapp")
+                    "telegram" -> pm.getLaunchIntentForPackage("org.telegram.messenger")
+                    "spotify" -> pm.getLaunchIntentForPackage("com.spotify.music")
                     else -> null
                 }
             }
@@ -64,6 +80,168 @@ class ActionDispatcher(private val context: Context) {
                 isSuccess = false,
                 spokenConfirmation = "অ্যাপটি চালু করতে সমস্যা হয়েছে।",
                 displayDetails = "Error launching $appName: ${e.message}"
+            )
+        }
+    }
+
+    fun toggleFlashlight(desiredState: Boolean? = null): ActionResult {
+        return try {
+            if (cameraManager == null) {
+                return ActionResult(false, "ফ্ল্যাশলাইট সমর্থন করে না।", "CameraManager unavailable")
+            }
+            val cameraId = cameraManager.cameraIdList.firstOrNull { id ->
+                val chars = cameraManager.getCameraCharacteristics(id)
+                chars.get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
+            } ?: cameraManager.cameraIdList.firstOrNull()
+
+            if (cameraId == null) {
+                return ActionResult(false, "ডিভাইসে কোনো ফ্ল্যাশলাইট পাওয়া যায়নি।", "No camera with flash found")
+            }
+
+            val targetState = desiredState ?: !isFlashlightOn
+            cameraManager.setTorchMode(cameraId, targetState)
+            isFlashlightOn = targetState
+
+            val msg = if (targetState) "ফ্ল্যাশলাইট অন করা হয়েছে।" else "ফ্ল্যাশলাইট বন্ধ করা হয়েছে।"
+            ActionResult(
+                isSuccess = true,
+                spokenConfirmation = msg,
+                displayDetails = "Flashlight set to: ${if (targetState) "ON" else "OFF"}"
+            )
+        } catch (e: Exception) {
+            ActionResult(
+                isSuccess = false,
+                spokenConfirmation = "ফ্ল্যাশলাইট পরিবর্তন করা যায়নি।",
+                displayDetails = "Flashlight error: ${e.message}"
+            )
+        }
+    }
+
+    fun adjustVolume(direction: String): ActionResult {
+        return try {
+            if (audioManager == null) return ActionResult(false, "অডিও ম্যানেজার পাওয়া যায়নি।", "AudioManager null")
+
+            when (direction.lowercase(Locale.ROOT)) {
+                "up" -> {
+                    audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, AudioManager.FLAG_SHOW_UI)
+                    ActionResult(true, "সাউন্ড ভলিউম বাড়ানো হয়েছে।", "Volume increased")
+                }
+                "down" -> {
+                    audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_LOWER, AudioManager.FLAG_SHOW_UI)
+                    ActionResult(true, "সাউন্ড ভলিউম কমানো হয়েছে।", "Volume decreased")
+                }
+                "mute" -> {
+                    audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, 0, AudioManager.FLAG_SHOW_UI)
+                    ActionResult(true, "সাউন্ড মিউট করা হয়েছে।", "Volume muted")
+                }
+                else -> {
+                    ActionResult(false, "ভলিউম নির্দেশনা বোঝা যায়নি।", "Unknown volume direction: $direction")
+                }
+            }
+        } catch (e: Exception) {
+            ActionResult(false, "ভলিউম নিয়ন্ত্রণ করা যায়নি।", "Volume error: ${e.message}")
+        }
+    }
+
+    fun controlMedia(mediaAction: String): ActionResult {
+        return try {
+            if (audioManager == null) return ActionResult(false, "মিডিয়া কন্ট্রোলার পাওয়া যায়নি।", "AudioManager null")
+
+            val keyCode = when (mediaAction.lowercase(Locale.ROOT)) {
+                "play", "pause", "toggle" -> KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
+                "next", "skip" -> KeyEvent.KEYCODE_MEDIA_NEXT
+                "previous", "prev" -> KeyEvent.KEYCODE_MEDIA_PREVIOUS
+                "stop" -> KeyEvent.KEYCODE_MEDIA_STOP
+                else -> KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
+            }
+
+            audioManager.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, keyCode))
+            audioManager.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, keyCode))
+
+            ActionResult(
+                isSuccess = true,
+                spokenConfirmation = "মিডিয়া $mediaAction নির্দেশ পাঠানো হয়েছে।",
+                displayDetails = "Dispatched media event: $mediaAction"
+            )
+        } catch (e: Exception) {
+            ActionResult(false, "মিডিয়া নিয়ন্ত্রণ করা যায়নি।", "Media error: ${e.message}")
+        }
+    }
+
+    fun sendWhatsAppMessage(recipientOrPhone: String?, messageText: String): ActionResult {
+        return try {
+            val phoneDigits = recipientOrPhone?.replace("[^0-9+]".toRegex(), "") ?: ""
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                if (phoneDigits.length >= 7) {
+                    val cleanPhone = phoneDigits.replace("+", "")
+                    data = Uri.parse("https://api.whatsapp.com/send?phone=$cleanPhone&text=${Uri.encode(messageText)}")
+                } else {
+                    action = Intent.ACTION_SEND
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_TEXT, messageText)
+                    `package` = "com.whatsapp"
+                }
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+            ActionResult(
+                isSuccess = true,
+                spokenConfirmation = "হোয়াটসঅ্যাপে মেসেজ পাঠানো হচ্ছে: $messageText",
+                displayDetails = "WhatsApp message dispatched to ${recipientOrPhone ?: "chat"}"
+            )
+        } catch (e: Exception) {
+            ActionResult(
+                isSuccess = false,
+                spokenConfirmation = "হোয়াটসঅ্যাপ মেসেজ পাঠানো যায়নি।",
+                displayDetails = "WhatsApp dispatch error: ${e.message}"
+            )
+        }
+    }
+
+    fun sendTelegramMessage(messageText: String): ActionResult {
+        return try {
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, messageText)
+                `package` = "org.telegram.messenger"
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+            ActionResult(
+                isSuccess = true,
+                spokenConfirmation = "টেলিগ্রামে মেসেজ পাঠানো হচ্ছে।",
+                displayDetails = "Dispatched text to Telegram: $messageText"
+            )
+        } catch (e: Exception) {
+            ActionResult(
+                isSuccess = false,
+                spokenConfirmation = "টেলিগ্রাম অ্যাপ খোলা যায়নি।",
+                displayDetails = "Telegram dispatch error: ${e.message}"
+            )
+        }
+    }
+
+    fun setAlarm(hour: Int, minute: Int, label: String = "NOVA Alarm"): ActionResult {
+        return try {
+            val alarmIntent = Intent(AlarmClock.ACTION_SET_ALARM).apply {
+                putExtra(AlarmClock.EXTRA_HOUR, hour)
+                putExtra(AlarmClock.EXTRA_MINUTES, minute)
+                putExtra(AlarmClock.EXTRA_MESSAGE, label)
+                putExtra(AlarmClock.EXTRA_SKIP_UI, true)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(alarmIntent)
+            val minStr = if (minute < 10) "0$minute" else "$minute"
+            ActionResult(
+                isSuccess = true,
+                spokenConfirmation = "সকাল/সন্ধ্যা $hour টা $minStr মিনিটে অ্যালার্ম সেট করা হয়েছে।",
+                displayDetails = "Set system alarm for $hour:$minStr ($label)"
+            )
+        } catch (e: Exception) {
+            ActionResult(
+                isSuccess = false,
+                spokenConfirmation = "অ্যালার্ম সেট করা যায়নি।",
+                displayDetails = "Alarm error: ${e.message}"
             )
         }
     }
@@ -279,17 +457,21 @@ class ActionDispatcher(private val context: Context) {
     fun getDeviceInfo(type: String): ActionResult {
         return when (type) {
             "BATTERY" -> {
-                val batteryFilter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
-                val batteryStatus = context.registerReceiver(null, batteryFilter)
-                val level = batteryStatus?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
-                val scale = batteryStatus?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
-                val pct = if (level >= 0 && scale > 0) (level * 100) / scale else -1
-                val isCharging = (batteryStatus?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) == BatteryManager.BATTERY_STATUS_CHARGING)
-                val statusText = if (isCharging) "চার্জ হচ্ছে" else "চার্জে নেই"
+                val profile = batteryOptManager.getDeviceProfile()
+                val statusText = if (profile.isCharging) "চার্জ হচ্ছে" else "চার্জে নেই"
                 ActionResult(
                     isSuccess = true,
-                    spokenConfirmation = "আপনার ব্যাটারি $pct শতাংশ এবং এটি বর্তমানে $statusText।",
-                    displayDetails = "Battery: $pct% ($statusText)"
+                    spokenConfirmation = "আপনার ব্যাটারি ${profile.batteryLevel} শতাংশ এবং এটি বর্তমানে $statusText। পাওয়ার সেভার: ${if (profile.isPowerSaveMode) "চালু" else "বন্ধ"}।",
+                    displayDetails = "Battery: ${profile.batteryLevel}% ($statusText), Power Saver: ${profile.isPowerSaveMode}"
+                )
+            }
+            "PERFORMANCE", "RAM" -> {
+                val profile = batteryOptManager.getDeviceProfile()
+                val ramMsg = "র‍্যামের ${profile.availableRamMb} মেগাবাইট ফাঁকা রয়েছে মোট ${profile.totalRamMb} মেগাবাইটের মধ্যে।"
+                ActionResult(
+                    isSuccess = true,
+                    spokenConfirmation = ramMsg,
+                    displayDetails = profile.profileSummary
                 )
             }
             "STORAGE" -> {

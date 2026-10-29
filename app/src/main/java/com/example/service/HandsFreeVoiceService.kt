@@ -12,13 +12,13 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
-import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.example.MainActivity
 import com.example.NovaApplication
 import com.example.R
 import com.example.automation.CommandIntent
 import com.example.automation.CommandParser
+import com.example.automation.SuperAgentState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -64,7 +64,7 @@ class HandsFreeVoiceService : Service() {
             return START_NOT_STICKY
         }
 
-        val notification = createNotification("Active — Listening continuously & observing screen")
+        val notification = createNotification("Active — Listening continuously with Battery Optimizer & Screen Vision")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(
                 NOTIFICATION_ID,
@@ -92,8 +92,15 @@ class HandsFreeVoiceService : Service() {
         scheduleNextListen(500)
     }
 
-    private fun scheduleNextListen(delayMs: Long) {
+    /**
+     * Adaptive scheduling based on battery level, charging state, and RAM profile
+     */
+    private fun scheduleNextListen(defaultDelayMs: Long? = null) {
         if (!isLoopActive) return
+        val app = NovaApplication.instance
+        val profile = app.batteryOptimizationManager.getDeviceProfile()
+        val delayMs = defaultDelayMs ?: profile.recommendedLoopDelayMs
+
         mainHandler.postDelayed({
             if (!isLoopActive) return@postDelayed
             listenOnce()
@@ -103,19 +110,21 @@ class HandsFreeVoiceService : Service() {
     private fun listenOnce() {
         val app = NovaApplication.instance
         if (app.textToSpeechManager.isSpeaking.value) {
-            // Wait for TTS to finish speaking before listening again to avoid hearing ourselves
-            scheduleNextListen(1200)
+            // Avoid hearing our own voice response
+            scheduleNextListen(1500)
             return
         }
 
         serviceScope.launch {
             val lang = app.preferencesRepository.userPreferencesFlow.first().language
+            app.superAgentEngine.updateStatus(SuperAgentState.LISTENING, desc = "Always-on listening active...")
+
             app.speechRecognitionManager.startListening(languageCode = lang) { recognizedText ->
                 if (recognizedText.isNotBlank()) {
                     _lastRecognizedCommand.value = recognizedText
                     processSpokenInput(recognizedText)
                 } else {
-                    scheduleNextListen(800)
+                    scheduleNextListen()
                 }
             }
         }
@@ -124,122 +133,62 @@ class HandsFreeVoiceService : Service() {
     private fun processSpokenInput(input: String) {
         val app = NovaApplication.instance
         serviceScope.launch {
-            // Update notification
-            updateNotification("Heard: \"$input\" — Processing...")
+            updateNotification("Heard: \"$input\" — Autonomous Processing...")
 
-            // Real-time Screen Vision: capture what user is currently seeing on screen
-            val visionService = NovaAccessibilityService.getActiveService()
-            val visionData = visionService?.captureScreenVision()
+            val engine = app.superAgentEngine
 
-            val command = CommandParser.parse(input)
-
-            if (command is CommandIntent.StopAll) {
+            // 1. Check for emergency stop
+            val parsed = CommandParser.parse(input)
+            if (parsed is CommandIntent.StopAll) {
                 app.textToSpeechManager.stop()
                 app.speechRecognitionManager.stopListening()
-                updateNotification("Stopped. Listening again...")
-                scheduleNextListen(1500)
+                engine.updateStatus(SuperAgentState.IDLE, desc = "Stopped by user command")
+                updateNotification("Stopped. Listening resumed.")
+                scheduleNextListen(2000)
                 return@launch
             }
 
-            if (command is CommandIntent.ScreenUnderstanding || input.contains("স্ক্রিন", ignoreCase = true) || input.contains("screen", ignoreCase = true)) {
-                // User asked about the screen
+            // 2. Generate Super-Agent Execution Plan (Single or Multi-App Chain)
+            val plan = engine.createExecutionPlan(input)
+
+            if (plan.executionSteps.any { it.action != "ai_assist" } || plan.executionSteps.size > 1) {
+                // Execute multi-app cross chaining autonomously!
+                updateNotification("Executing ${plan.executionSteps.size} automated steps...")
+                val executedPlan = engine.executePlan(plan) { status ->
+                    updateNotification(status.activeStepDescription)
+                }
+                app.textToSpeechManager.speak(executedPlan.feedbackMessage)
+            } else {
+                // Conversational query enriched with real-time screen vision
+                val visionService = NovaAccessibilityService.getActiveService()
+                val visionData = visionService?.captureScreenVision()
+
                 val prompt = if (visionData != null && visionData.fullText.isNotBlank()) {
                     """
                     ${visionData.toPromptContext()}
                     
-                    The user asks: "$input"
-                    Explain clearly what is on the screen, what app the user is using, and answer their query in natural Bengali or English.
-                    """.trimIndent()
-                } else {
-                    "স্ক্রিনের তথ্য পড়ার জন্য Settings থেকে Accessibility Service চালু করুন।"
-                }
-
-                if (visionData != null && visionData.fullText.isNotBlank()) {
-                    val lang = app.preferencesRepository.userPreferencesFlow.first().language
-                    val aiResult = app.geminiRepository.askGemini(prompt = prompt, preferredLanguage = lang)
-                    aiResult.onSuccess { reply ->
-                        updateNotification("NOVA: $reply")
-                        app.textToSpeechManager.speak(reply, languageCode = lang)
-                    }.onFailure { err ->
-                        app.textToSpeechManager.speak("সমস্যা হয়েছে: ${err.message}")
-                    }
-                } else {
-                    app.textToSpeechManager.speak("স্ক্রিন দেখার জন্য Accessibility চালু করুন।")
-                }
-            } else if (command is CommandIntent.GeneralAiQuery) {
-                // Enrich query with active screen context so Gemini always knows what the user is doing!
-                val enrichedPrompt = if (visionData != null && visionData.fullText.isNotBlank()) {
-                    """
-                    ${visionData.toPromptContext()}
-                    
                     User query: "$input"
-                    If the user refers to something on screen, use the screen vision context above. Answer concisely for voice output.
+                    Answer concisely for voice output. If the user refers to the screen, use the screen vision context above.
                     """.trimIndent()
                 } else {
                     input
                 }
 
+                engine.updateStatus(SuperAgentState.THINKING, desc = "Querying Gemini AI...")
                 val lang = app.preferencesRepository.userPreferencesFlow.first().language
-                val aiResult = app.geminiRepository.askGemini(prompt = enrichedPrompt, preferredLanguage = lang)
+                val aiResult = app.geminiRepository.askGemini(prompt = prompt, preferredLanguage = lang)
                 aiResult.onSuccess { reply ->
+                    engine.updateStatus(SuperAgentState.DONE, desc = reply, feedback = reply)
                     updateNotification("NOVA: $reply")
                     app.textToSpeechManager.speak(reply, languageCode = lang)
                 }.onFailure { err ->
-                    app.textToSpeechManager.speak("দুঃখিত, সংযোগে সমস্যা হয়েছে।")
-                }
-            } else {
-                // Deterministic Phone Automation Action
-                when (command) {
-                    is CommandIntent.AppLaunch -> {
-                        val res = app.actionDispatcher.launchApp(command.appName, command.packageName)
-                        app.textToSpeechManager.speak(res.spokenConfirmation)
-                    }
-                    is CommandIntent.SystemSetting -> {
-                        val res = app.actionDispatcher.openSystemSetting(command.intentAction, command.title)
-                        app.textToSpeechManager.speak(res.spokenConfirmation)
-                    }
-                    is CommandIntent.WebSearch -> {
-                        val res = app.actionDispatcher.searchWeb(command.query)
-                        app.textToSpeechManager.speak(res.spokenConfirmation)
-                    }
-                    is CommandIntent.YouTubeSearch -> {
-                        val res = app.actionDispatcher.searchYouTube(command.query)
-                        app.textToSpeechManager.speak(res.spokenConfirmation)
-                    }
-                    is CommandIntent.Calculator -> {
-                        val res = "হিসাব: ${command.evaluatedResult}"
-                        app.textToSpeechManager.speak(res)
-                    }
-                    is CommandIntent.Reminder -> {
-                        val res = app.actionDispatcher.scheduleReminder(command.title, command.delayMinutes)
-                        app.textToSpeechManager.speak(res.spokenConfirmation)
-                    }
-                    is CommandIntent.SaveMemory -> {
-                        val res = app.actionDispatcher.saveMemory(command.key, command.content, command.category)
-                        app.textToSpeechManager.speak(res.spokenConfirmation)
-                    }
-                    is CommandIntent.DeviceInfo -> {
-                        val res = app.actionDispatcher.getDeviceInfo(command.infoType)
-                        app.textToSpeechManager.speak(res.spokenConfirmation)
-                    }
-                    is CommandIntent.Dialer -> {
-                        val res = app.actionDispatcher.openDialer(command.phoneNumber, command.contactName)
-                        app.textToSpeechManager.speak(res.spokenConfirmation)
-                    }
-                    is CommandIntent.SmsDraft -> {
-                        val res = app.actionDispatcher.composeSms(command.recipient, command.message)
-                        app.textToSpeechManager.speak(res.spokenConfirmation)
-                    }
-                    is CommandIntent.EmailDraft -> {
-                        val res = app.actionDispatcher.composeEmail(command.recipient, command.subject, command.body)
-                        app.textToSpeechManager.speak(res.spokenConfirmation)
-                    }
-                    else -> {}
+                    engine.updateStatus(SuperAgentState.ERROR, desc = err.message ?: "AI Error")
+                    app.textToSpeechManager.speak("সংযোগ সমস্যা হয়েছে।")
                 }
             }
 
-            // Once spoken response is dispatched, schedule next listen
-            scheduleNextListen(2000)
+            // Schedule next listen using battery-optimized delay
+            scheduleNextListen(2200)
         }
     }
 
@@ -249,6 +198,7 @@ class HandsFreeVoiceService : Service() {
         val app = NovaApplication.instance
         app.speechRecognitionManager.stopListening()
         app.textToSpeechManager.stop()
+        app.batteryOptimizationManager.releaseWakeLockSafely()
     }
 
     override fun onDestroy() {
@@ -264,10 +214,10 @@ class HandsFreeVoiceService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "NOVA AI Always-On Voice & Vision Service",
+                "NOVA AI Super-Agent Always-On Voice & Vision",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Always-on voice recognition and real-time screen vision"
+                description = "Autonomous multi-app execution and screen vision daemon"
             }
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(channel)
@@ -293,7 +243,7 @@ class HandsFreeVoiceService : Service() {
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle("NOVA AI — Always-On Voice & Vision")
+            .setContentTitle("NOVA AI — OS Super-Agent")
             .setContentText(statusText)
             .setOngoing(true)
             .setContentIntent(openPendingIntent)

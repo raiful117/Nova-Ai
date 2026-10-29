@@ -58,13 +58,21 @@ class GeminiRepository(
     }
 
     /**
-     * Executes a real test connection to Gemini API with the given key.
+     * Executes a real test connection to Gemini API with the given key and model.
      * Returns Result.success with model response or Result.failure with human-readable error.
      */
-    suspend fun testConnection(apiKey: String): Result<String> = withContext(Dispatchers.IO) {
+    suspend fun testConnection(apiKey: String, model: String? = null): Result<String> = withContext(Dispatchers.IO) {
         val trimmedKey = apiKey.trim()
         if (trimmedKey.isBlank()) {
             return@withContext Result.failure(IllegalArgumentException("API Key cannot be empty. Please enter your Google AI Studio API key."))
+        }
+
+        val targetModel = if (!model.isNullOrBlank()) {
+            model.trim()
+        } else {
+            preferencesRepository.userPreferencesFlow.first().selectedGeminiModel.ifBlank {
+                GeminiModelCatalog.DEFAULT_MODEL_ID
+            }
         }
 
         try {
@@ -78,25 +86,41 @@ class GeminiRepository(
                 generationConfig = GenerationConfig(maxOutputTokens = 16)
             )
 
-            val response = apiService.generateContent(
-                model = "gemini-2.5-flash",
+            var response = apiService.generateContent(
+                model = targetModel,
                 apiKey = trimmedKey,
                 request = request
             )
 
+            // Resilient fallback if chosen model encounters 404 or 429
+            if (!response.isSuccessful && (response.code() == 404 || response.code() == 429)) {
+                val fallbackModel = if (targetModel != "gemini-2.5-flash") "gemini-2.5-flash" else "gemini-2.0-flash"
+                val fallbackResponse = apiService.generateContent(
+                    model = fallbackModel,
+                    apiKey = trimmedKey,
+                    request = request
+                )
+                if (fallbackResponse.isSuccessful) {
+                    val candidateText = fallbackResponse.body()?.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+                    val reply = candidateText?.trim() ?: "OK"
+                    return@withContext Result.success("Connected successfully! ($targetModel active • Verified: $reply)")
+                }
+            }
+
             if (response.isSuccessful) {
                 val candidateText = response.body()?.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
-                Result.success(candidateText ?: "Connection successful! Gemini API is active.")
+                val reply = candidateText?.trim() ?: "OK"
+                Result.success("Connection successful! ($targetModel active • Reply: $reply)")
             } else {
                 val errorCode = response.code()
                 val errorBody = response.errorBody()?.string() ?: ""
                 val errorMessage = when (errorCode) {
-                    400 -> "Invalid API Key or request parameters (HTTP 400). Please check your key."
+                    400 -> "Invalid request for model $targetModel (HTTP 400). Please check your key or model name."
                     403 -> "Permission denied (HTTP 403). Your API key does not have access or is restricted."
-                    404 -> "Model endpoint not found (HTTP 404)."
-                    429 -> "API quota exceeded (HTTP 429). You have hit the rate limit for this key."
+                    404 -> "Model endpoint '$targetModel' not found (HTTP 404). Check model availability for your account."
+                    429 -> "API quota exceeded for $targetModel (HTTP 429). Rate limit reached."
                     500, 503 -> "Google Gemini server error ($errorCode). Please try again shortly."
-                    else -> "API connection failed (HTTP $errorCode): $errorBody"
+                    else -> "API connection failed ($targetModel HTTP $errorCode): $errorBody"
                 }
                 Result.failure(Exception(errorMessage))
             }
@@ -110,18 +134,28 @@ class GeminiRepository(
     }
 
     /**
-     * Sends user query to Gemini AI with conversational context and system instructions.
+     * Sends user query to Gemini AI with conversational context, system instructions,
+     * and dynamic model routing with automatic fallback.
      */
     suspend fun askGemini(
         prompt: String,
         conversationHistory: List<Pair<String, String>> = emptyList(),
-        preferredLanguage: String = "bn"
+        preferredLanguage: String = "bn",
+        model: String? = null
     ): Result<String> = withContext(Dispatchers.IO) {
         val apiKey = getEffectiveApiKey()
         if (apiKey.isBlank()) {
             return@withContext Result.failure(
                 IllegalStateException("Gemini API key is not configured. Please tap Settings or API Key Setup to add your key.")
             )
+        }
+
+        val targetModel = if (!model.isNullOrBlank()) {
+            model.trim()
+        } else {
+            preferencesRepository.userPreferencesFlow.first().selectedGeminiModel.ifBlank {
+                GeminiModelCatalog.DEFAULT_MODEL_ID
+            }
         }
 
         val systemPrompt = """
@@ -153,11 +187,25 @@ class GeminiRepository(
         )
 
         try {
-            val response = apiService.generateContent(
-                model = "gemini-2.5-flash",
+            var response = apiService.generateContent(
+                model = targetModel,
                 apiKey = apiKey,
                 request = request
             )
+
+            // Intelligent resilient fallback if chosen model encounters 404 or 429
+            if (!response.isSuccessful && (response.code() == 404 || response.code() == 429)) {
+                val fallbackModel = if (targetModel != "gemini-2.5-flash") "gemini-2.5-flash" else "gemini-2.0-flash"
+                Log.w("GeminiRepo", "Model $targetModel returned ${response.code()}. Resilient fallback to $fallbackModel")
+                val fallbackResponse = apiService.generateContent(
+                    model = fallbackModel,
+                    apiKey = apiKey,
+                    request = request
+                )
+                if (fallbackResponse.isSuccessful) {
+                    response = fallbackResponse
+                }
+            }
 
             if (response.isSuccessful) {
                 val candidateText = response.body()?.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
@@ -170,9 +218,10 @@ class GeminiRepository(
                 val code = response.code()
                 val errBody = response.errorBody()?.string() ?: ""
                 val msg = when (code) {
-                    400 -> "API request was rejected (HTTP 400). Please check your query or API key."
+                    400 -> "API request rejected (HTTP 400). Please check your query or API key."
                     403 -> "API Key permission denied (HTTP 403). Check your Google AI Studio key."
-                    429 -> "Quota limit reached (HTTP 429). Please wait a moment before asking again."
+                    404 -> "Model '$targetModel' not found (HTTP 404). Please select a different model in Settings."
+                    429 -> "Quota limit reached for $targetModel (HTTP 429). Please wait a moment."
                     500, 503 -> "Gemini AI servers are temporarily busy ($code). Please retry."
                     else -> "Error ($code): $errBody"
                 }

@@ -14,18 +14,16 @@ import android.provider.Settings
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
-import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.Button
-import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.example.MainActivity
 import com.example.NovaApplication
 import com.example.R
-import com.example.automation.CommandIntent
-import com.example.automation.CommandParser
+import com.example.automation.SuperAgentState
+import com.example.automation.SuperAgentStatus
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -43,9 +41,10 @@ class OverlayAssistantService : Service() {
 
     private var rootOverlayView: View? = null
     private var orbImageView: ImageView? = null
+    private var statusBadge: TextView? = null
+    private var batteryBadge: TextView? = null
     private var expandedPanel: LinearLayout? = null
     private var responseBubble: TextView? = null
-    private var statusLabel: TextView? = null
 
     private var isExpanded = false
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -70,6 +69,7 @@ class OverlayAssistantService : Service() {
         super.onCreate()
         if (canDrawOverlays(this)) {
             setupOverlayUi()
+            observeSuperAgentStatus()
             _isOverlayActive.value = true
         } else {
             stopSelf()
@@ -94,8 +94,8 @@ class OverlayAssistantService : Service() {
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = 30
-            y = 220
+            x = 24
+            y = 200
         }
 
         val container = LinearLayout(this).apply {
@@ -103,22 +103,57 @@ class OverlayAssistantService : Service() {
             setPadding(8, 8, 8, 8)
         }
 
-        // Response subtitle bubble (shows above orb when speaking/active)
+        // 1. Hardware & Battery Saver Pill
+        batteryBadge = TextView(this).apply {
+            visibility = View.VISIBLE
+            setTextColor(0xFF00F0FF.toInt())
+            textSize = 10f
+            setPadding(16, 6, 16, 6)
+            background = GradientDrawable().apply {
+                setColor(0xEE0B0C1E.toInt())
+                cornerRadius = 16f
+                setStroke(1, 0xFF282B5A.toInt())
+            }
+        }
+        updateHardwareBadge()
+        container.addView(batteryBadge)
+
+        // 2. Real-Time Super-Agent Status Transition Pill: 🔵 Listening ➔ 🟡 Thinking ➔ 🟢 Executing ➔ ✨ Done
+        statusBadge = TextView(this).apply {
+            text = "🔵 Ready"
+            setTextColor(Color.WHITE)
+            textSize = 11f
+            setPadding(20, 8, 20, 8)
+            background = GradientDrawable().apply {
+                setColor(0xDD12132A.toInt())
+                cornerRadius = 20f
+                setStroke(2, 0xFF9D50FF.toInt())
+            }
+        }
+        val statusParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
+            setMargins(0, 6, 0, 6)
+        }
+        container.addView(statusBadge, statusParams)
+
+        // 3. Response / Subtitle Bubble (Shows query, speech output, or multi-step execution details)
         responseBubble = TextView(this).apply {
             visibility = View.GONE
             setTextColor(Color.WHITE)
-            textSize = 13f
+            textSize = 12f
             setPadding(24, 16, 24, 16)
             maxWidth = 650
             background = GradientDrawable().apply {
-                setColor(0xEE161732.toInt())
+                setColor(0xF0101228.toInt())
                 cornerRadius = 24f
                 setStroke(2, 0xFF00F0FF.toInt())
             }
         }
         container.addView(responseBubble)
 
-        // Horizontal Row with Orb + Controls
+        // 4. Main Interactive Row: Glowing Orb + Quick Action Dock
         val mainRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -127,34 +162,34 @@ class OverlayAssistantService : Service() {
         // Glowing Voice Orb icon
         orbImageView = ImageView(this).apply {
             setImageResource(R.drawable.ic_nova_logo)
-            layoutParams = LinearLayout.LayoutParams(140, 140)
+            layoutParams = LinearLayout.LayoutParams(136, 136)
             elevation = 16f
             setPadding(10, 10, 10, 10)
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
-                setColor(0xCC080811.toInt())
+                setColor(0xEE080811.toInt())
                 setStroke(3, 0xFF9D50FF.toInt())
             }
         }
         mainRow.addView(orbImageView)
 
-        // Expanded Floating Control Panel
+        // Expanded Action Dock
         expandedPanel = LinearLayout(this).apply {
             visibility = View.GONE
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(16, 8, 16, 8)
+            setPadding(12, 6, 12, 6)
             background = GradientDrawable().apply {
-                setColor(0xDD0F1024.toInt())
-                cornerRadius = 32f
+                setColor(0xEE0F1024.toInt())
+                cornerRadius = 30f
                 setStroke(2, 0xFF2D305E.toInt())
             }
         }
 
-        // 1. Screen Vision Button (Analyze Screen)
+        // 1. Screen Vision Button
         val visionBtn = Button(this).apply {
             text = "👁️ Vision"
-            textSize = 12f
+            textSize = 11f
             setTextColor(Color.WHITE)
             setBackgroundColor(Color.TRANSPARENT)
             setOnClickListener {
@@ -166,7 +201,7 @@ class OverlayAssistantService : Service() {
         // 2. Mic / Voice command button
         val micBtn = Button(this).apply {
             text = "🎤 Mic"
-            textSize = 12f
+            textSize = 11f
             setTextColor(0xFF00F0FF.toInt())
             setBackgroundColor(Color.TRANSPARENT)
             setOnClickListener {
@@ -178,7 +213,7 @@ class OverlayAssistantService : Service() {
         // 3. Stop button
         val stopBtn = Button(this).apply {
             text = "⏹ Stop"
-            textSize = 12f
+            textSize = 11f
             setTextColor(0xFFFF4B55.toInt())
             setBackgroundColor(Color.TRANSPARENT)
             setOnClickListener {
@@ -190,7 +225,7 @@ class OverlayAssistantService : Service() {
         // 4. Open App button
         val openAppBtn = Button(this).apply {
             text = "↗ App"
-            textSize = 12f
+            textSize = 11f
             setTextColor(0xFFA6A8C7.toInt())
             setBackgroundColor(Color.TRANSPARENT)
             setOnClickListener {
@@ -205,7 +240,7 @@ class OverlayAssistantService : Service() {
         mainRow.addView(expandedPanel)
         container.addView(mainRow)
 
-        // Draggable & Click Handling on the Orb
+        // Draggable & Click Handling
         var initialX = 0
         var initialY = 0
         var initialTouchX = 0f
@@ -251,9 +286,54 @@ class OverlayAssistantService : Service() {
         }
     }
 
+    private fun observeSuperAgentStatus() {
+        serviceScope.launch {
+            val engine = NovaApplication.instance.superAgentEngine
+            engine.statusFlow.collect { status ->
+                updateStatusTransition(status)
+            }
+        }
+    }
+
+    private fun updateStatusTransition(status: SuperAgentStatus) {
+        mainHandler.post {
+            val (badgeText, strokeColor) = when (status.state) {
+                SuperAgentState.IDLE -> Pair("Ready", 0xFF9D50FF.toInt())
+                SuperAgentState.LISTENING -> Pair("🔵 Listening...", 0xFF00F0FF.toInt())
+                SuperAgentState.THINKING -> Pair("🟡 Thinking & Planning...", 0xFFFFB800.toInt())
+                SuperAgentState.EXECUTING -> {
+                    val stepStr = if (status.totalSteps > 0) " (${status.currentStepNumber}/${status.totalSteps})" else ""
+                    Pair("🟢 Executing Step$stepStr", 0xFF00E676.toInt())
+                }
+                SuperAgentState.DONE -> Pair("✨ Done", 0xFF9D50FF.toInt())
+                SuperAgentState.ERROR -> Pair("⚠️ Issue", 0xFFFF4B55.toInt())
+            }
+
+            statusBadge?.text = badgeText
+            (statusBadge?.background as? GradientDrawable)?.setStroke(2, strokeColor)
+            (orbImageView?.background as? GradientDrawable)?.setStroke(3, strokeColor)
+
+            if (status.activeStepDescription.isNotBlank() || status.feedbackMessage.isNotBlank()) {
+                val detail = status.activeStepDescription.ifBlank { status.feedbackMessage }
+                responseBubble?.text = detail
+                responseBubble?.visibility = View.VISIBLE
+            }
+
+            updateHardwareBadge()
+        }
+    }
+
+    private fun updateHardwareBadge() {
+        val app = NovaApplication.instance
+        val profile = app.batteryOptimizationManager.getDeviceProfile()
+        val pwr = if (profile.isPowerSaveMode) "⚡Saver" else "Normal"
+        batteryBadge?.text = "🔋${profile.batteryLevel}% | RAM: ${profile.availableRamMb}MB Free | $pwr"
+    }
+
     private fun toggleExpanded() {
         isExpanded = !isExpanded
         expandedPanel?.visibility = if (isExpanded) View.VISIBLE else View.GONE
+        updateHardwareBadge()
     }
 
     private fun showFloatingResponse(message: String) {
@@ -270,26 +350,19 @@ class OverlayAssistantService : Service() {
             val visionService = NovaAccessibilityService.getActiveService()
             val visionData = visionService?.captureScreenVision()
 
-            val prompt = if (visionData != null && visionData.fullText.isNotBlank()) {
-                """
-                ${visionData.toPromptContext()}
-                
-                The user is asking about what is currently on their Android phone screen.
-                Explain concisely what app is open, what the user is looking at or doing, and summarize the key visible information in natural Bengali or English.
-                """.trimIndent()
-            } else {
-                "No accessible screen text detected. Please ensure Accessibility Service is enabled in Settings."
-            }
-
             if (visionData != null && visionData.fullText.isNotBlank()) {
+                val prompt = """
+                    ${visionData.toPromptContext()}
+                    
+                    The user is asking about what is currently on their Android phone screen.
+                    Explain concisely what app is open, what the user is looking at or doing, and summarize the key visible information in natural Bengali or English.
+                """.trimIndent()
+
                 val lang = app.preferencesRepository.userPreferencesFlow.first().language
                 val result = app.geminiRepository.askGemini(prompt = prompt, preferredLanguage = lang)
                 result.onSuccess { responseText ->
                     showFloatingResponse(responseText)
-                    app.textToSpeechManager.speak(
-                        text = responseText,
-                        languageCode = lang
-                    )
+                    app.textToSpeechManager.speak(text = responseText, languageCode = lang)
                 }.onFailure { err ->
                     showFloatingResponse("Vision error: ${err.message}")
                 }
@@ -301,82 +374,52 @@ class OverlayAssistantService : Service() {
     }
 
     fun startVoiceListening() {
-        showFloatingResponse("Listening... Speak command or ask about screen")
         val app = NovaApplication.instance
+        app.superAgentEngine.updateStatus(SuperAgentState.LISTENING, desc = "Listening for your commands...")
         app.speechRecognitionManager.startListening { query ->
             handleSpokenQuery(query)
         }
     }
 
     private fun handleSpokenQuery(query: String) {
-        showFloatingResponse("Heard: \"$query\"")
         serviceScope.launch {
             val app = NovaApplication.instance
-            val visionService = NovaAccessibilityService.getActiveService()
-            val visionData = visionService?.captureScreenVision()
+            val engine = app.superAgentEngine
 
-            val command = CommandParser.parse(query)
+            // 1. Generate Structured Execution Plan
+            val plan = engine.createExecutionPlan(query)
 
-            if (command is CommandIntent.ScreenUnderstanding || query.contains("screen", ignoreCase = true) || query.contains("স্ক্রিন")) {
-                analyzeActiveScreen()
-                return@launch
-            }
+            // If it's a multi-app chain or hardware action, execute autonomously!
+            if (plan.executionSteps.any { it.action != "ai_assist" } || plan.executionSteps.size > 1) {
+                showFloatingResponse("Executing multi-app chain...")
+                engine.executePlan(plan)
+                app.textToSpeechManager.speak(plan.feedbackMessage)
+            } else {
+                // Conversational or single query
+                val visionService = NovaAccessibilityService.getActiveService()
+                val visionData = visionService?.captureScreenVision()
 
-            if (command is CommandIntent.GeneralAiQuery) {
-                // Enrich query with active screen context if available!
-                val enrichedPrompt = if (visionData != null && visionData.fullText.isNotBlank()) {
+                val prompt = if (visionData != null && visionData.fullText.isNotBlank()) {
                     """
                     ${visionData.toPromptContext()}
                     
-                    User spoken request: $query
-                    (If the user's question relates to the screen, use the screen context above. Otherwise, answer conversationally in concise spoken language.)
+                    User query: "$query"
+                    Answer concisely for voice output.
                     """.trimIndent()
                 } else {
                     query
                 }
 
+                engine.updateStatus(SuperAgentState.THINKING, desc = "Asking Gemini AI...")
                 val lang = app.preferencesRepository.userPreferencesFlow.first().language
-                val result = app.geminiRepository.askGemini(prompt = enrichedPrompt, preferredLanguage = lang)
+                val result = app.geminiRepository.askGemini(prompt = prompt, preferredLanguage = lang)
                 result.onSuccess { reply ->
+                    engine.updateStatus(SuperAgentState.DONE, desc = reply, feedback = reply)
                     showFloatingResponse(reply)
                     app.textToSpeechManager.speak(reply, languageCode = lang)
                 }.onFailure { ex ->
+                    engine.updateStatus(SuperAgentState.ERROR, desc = ex.message ?: "AI Error")
                     showFloatingResponse("Error: ${ex.message}")
-                }
-            } else {
-                // Execute system command
-                when (command) {
-                    is CommandIntent.AppLaunch -> {
-                        val res = app.actionDispatcher.launchApp(command.appName, command.packageName)
-                        showFloatingResponse(res.spokenConfirmation)
-                        app.textToSpeechManager.speak(res.spokenConfirmation)
-                    }
-                    is CommandIntent.SystemSetting -> {
-                        val res = app.actionDispatcher.openSystemSetting(command.intentAction, command.title)
-                        showFloatingResponse(res.spokenConfirmation)
-                        app.textToSpeechManager.speak(res.spokenConfirmation)
-                    }
-                    is CommandIntent.WebSearch -> {
-                        val res = app.actionDispatcher.searchWeb(command.query)
-                        showFloatingResponse(res.spokenConfirmation)
-                        app.textToSpeechManager.speak(res.spokenConfirmation)
-                    }
-                    is CommandIntent.YouTubeSearch -> {
-                        val res = app.actionDispatcher.searchYouTube(command.query)
-                        showFloatingResponse(res.spokenConfirmation)
-                        app.textToSpeechManager.speak(res.spokenConfirmation)
-                    }
-                    is CommandIntent.Calculator -> {
-                        val reply = "হিসাবের ফলাফল: ${command.evaluatedResult}"
-                        showFloatingResponse(reply)
-                        app.textToSpeechManager.speak(reply)
-                    }
-                    is CommandIntent.StopAll -> {
-                        stopAssistant()
-                    }
-                    else -> {
-                        showFloatingResponse("Executing task...")
-                    }
                 }
             }
         }
@@ -386,6 +429,7 @@ class OverlayAssistantService : Service() {
         val app = NovaApplication.instance
         app.textToSpeechManager.stop()
         app.speechRecognitionManager.stopListening()
+        app.superAgentEngine.updateStatus(SuperAgentState.IDLE, desc = "Stopped")
         mainHandler.post {
             responseBubble?.visibility = View.GONE
         }

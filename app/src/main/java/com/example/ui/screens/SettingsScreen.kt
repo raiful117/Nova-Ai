@@ -43,6 +43,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import com.example.data.network.gemini.GeminiModelCatalog
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -82,6 +83,7 @@ fun SettingsScreen(
     onNavigateToAbout: () -> Unit
 ) {
     val userPrefs by viewModel.userPreferences.collectAsState()
+    val activeModelInfo = GeminiModelCatalog.findModel(userPrefs.selectedGeminiModel)
 
     val currentLangLabel = when (userPrefs.language) {
         "bn" -> "বাংলা (Bengali)"
@@ -161,9 +163,9 @@ fun SettingsScreen(
                         color = NovaCyanGlow
                     )
                     Text(
-                        text = "Powered by Google Gemini 2.5 Flash",
+                        text = "Model: ${activeModelInfo.displayName} (${activeModelInfo.tag})",
                         style = MaterialTheme.typography.labelSmall,
-                        color = NovaTextSecondary
+                        color = NovaCyanGlow.copy(alpha = 0.85f)
                     )
                 }
             }
@@ -255,9 +257,17 @@ fun SettingsScreen(
                 SettingsRow(
                     icon = Icons.Default.VpnKey,
                     title = "Gemini API Configuration",
-                    subtitle = if (userPrefs.apiKey.isNotBlank()) "Configured (${userPrefs.apiKey.take(4)}...)" else "Not configured — Tap to add",
+                    subtitle = if (userPrefs.apiKey.isNotBlank()) "Key Configured (${userPrefs.apiKey.take(4)}...)" else "Not configured — Tap to add",
                     onClick = onNavigateToApi,
                     testTag = "settings_api_row"
+                )
+                SettingsDivider()
+                SettingsRow(
+                    icon = Icons.Default.Psychology,
+                    title = "Active Gemini Model",
+                    subtitle = "${activeModelInfo.displayName} • ${activeModelInfo.tag}",
+                    onClick = onNavigateToApi,
+                    testTag = "settings_model_row"
                 )
                 SettingsDivider()
                 SettingsRow(

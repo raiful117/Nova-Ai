@@ -3,6 +3,7 @@ package com.example
 import com.example.automation.CommandIntent
 import com.example.automation.CommandParser
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -66,5 +67,38 @@ class ExampleUnitTest {
         val memBn = CommandParser.parse("মনে রাখো আমি বাংলায় কথা বলতে পছন্দ করি")
         assertTrue(memBn is CommandIntent.SaveMemory)
         assertEquals("আমি বাংলায় কথা বলতে পছন্দ করি", (memBn as CommandIntent.SaveMemory).content)
+    }
+
+    @Test
+    fun testGeminiModelCatalog() {
+        val models = com.example.data.network.gemini.GeminiModelCatalog.AVAILABLE_MODELS
+        assertTrue(models.size >= 6)
+
+        // Verify key flagship & free tier models are present
+        val modelIds = models.map { it.id }
+        assertTrue(modelIds.contains("gemini-3.8-flash"))
+        assertTrue(modelIds.contains("gemini-2.5-flash"))
+        assertTrue(modelIds.contains("gemini-2.5-pro"))
+        assertTrue(modelIds.contains("gemini-2.0-flash"))
+        assertTrue(modelIds.contains("gemini-2.0-flash-lite"))
+        assertTrue(modelIds.contains("gemini-2.0-pro-exp-02-05"))
+
+        // Verify all old 1.5 models are completely removed
+        assertFalse(modelIds.contains("gemini-1.5-flash"))
+        assertFalse(modelIds.contains("gemini-1.5-pro"))
+        assertFalse(modelIds.contains("gemini-1.5-flash-8b"))
+
+        // Verify default model is gemini-3.8-flash
+        val defaultModel = com.example.data.network.gemini.GeminiModelCatalog.findModel(
+            com.example.data.network.gemini.GeminiModelCatalog.DEFAULT_MODEL_ID
+        )
+        assertEquals("gemini-3.8-flash", defaultModel.id)
+        assertEquals("Gemini 3.8 Flash", defaultModel.displayName)
+        assertTrue(defaultModel.tag.contains("Newest Flagship"))
+
+        // Verify custom model fallback
+        val customModel = com.example.data.network.gemini.GeminiModelCatalog.findModel("gemini-custom-finetuned")
+        assertEquals("gemini-custom-finetuned", customModel.id)
+        assertEquals("Custom", customModel.tag)
     }
 }

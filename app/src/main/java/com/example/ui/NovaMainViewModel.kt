@@ -7,6 +7,10 @@ import com.example.NovaApplication
 import com.example.automation.ActionResult
 import com.example.automation.CommandIntent
 import com.example.automation.CommandParser
+import com.example.automation.ExecutionPlan
+import com.example.automation.SuperAgentEngine
+import com.example.automation.SuperAgentState
+import com.example.automation.SuperAgentStatus
 import com.example.data.local.ConversationEntity
 import com.example.data.local.MemoryEntity
 import com.example.data.local.ReminderEntity
@@ -14,6 +18,7 @@ import com.example.data.local.TaskExecutionEntity
 import com.example.data.preferences.UserPreferences
 import com.example.service.NovaAccessibilityService
 import com.example.speech.TtsVoiceInfo
+import com.example.util.DeviceHardwareProfile
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -40,6 +45,8 @@ class NovaMainViewModel(application: Application) : AndroidViewModel(application
     val speechManager = app.speechRecognitionManager
     val ttsManager = app.textToSpeechManager
     val actionDispatcher = app.actionDispatcher
+    val superAgentEngine: SuperAgentEngine = app.superAgentEngine
+    val batteryOptManager = app.batteryOptimizationManager
 
     val userPreferences: StateFlow<UserPreferences> = preferencesRepo.userPreferencesFlow
         .stateIn(viewModelScope, SharingStarted.Eagerly, UserPreferences())
@@ -59,6 +66,12 @@ class NovaMainViewModel(application: Application) : AndroidViewModel(application
 
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
+
+    // Super-Agent state and structured JSON execution plan
+    val superAgentStatus: StateFlow<SuperAgentStatus> = superAgentEngine.statusFlow
+
+    private val _latestExecutionPlanJson = MutableStateFlow("")
+    val latestExecutionPlanJson: StateFlow<String> = _latestExecutionPlanJson.asStateFlow()
 
     // API Test Connection State
     private val _apiTestStatus = MutableStateFlow<String?>(null)
@@ -103,6 +116,47 @@ class NovaMainViewModel(application: Application) : AndroidViewModel(application
                 }
             }
         }
+
+        // Observe SuperAgent transitions and reflect into OrbState
+        viewModelScope.launch {
+            superAgentEngine.statusFlow.collect { status ->
+                when (status.state) {
+                    SuperAgentState.IDLE -> {
+                        if (!ttsManager.isSpeaking.value) {
+                            _orbState.value = OrbState.IDLE
+                            _statusText.value = "Ready to listen"
+                        }
+                    }
+                    SuperAgentState.LISTENING -> {
+                        _orbState.value = OrbState.LISTENING
+                        _statusText.value = "Listening..."
+                    }
+                    SuperAgentState.THINKING -> {
+                        _orbState.value = OrbState.PROCESSING
+                        _statusText.value = "Planning execution steps..."
+                    }
+                    SuperAgentState.EXECUTING -> {
+                        _orbState.value = OrbState.PROCESSING
+                        _statusText.value = status.activeStepDescription
+                    }
+                    SuperAgentState.DONE -> {
+                        _orbState.value = OrbState.IDLE
+                        _statusText.value = "Execution complete"
+                    }
+                    SuperAgentState.ERROR -> {
+                        _orbState.value = OrbState.ERROR
+                        _statusText.value = "Execution error"
+                    }
+                }
+                if (status.executionPlanJson.isNotBlank()) {
+                    _latestExecutionPlanJson.value = status.executionPlanJson
+                }
+            }
+        }
+    }
+
+    fun getHardwareProfile(): DeviceHardwareProfile {
+        return batteryOptManager.getDeviceProfile()
     }
 
     fun startListening() {
@@ -135,6 +189,7 @@ class NovaMainViewModel(application: Application) : AndroidViewModel(application
         activeJob = null
         speechManager.stopListening()
         ttsManager.stop()
+        superAgentEngine.updateStatus(SuperAgentState.IDLE, desc = "Stopped")
         _orbState.value = OrbState.IDLE
         _statusText.value = "Ready to listen"
     }
@@ -146,9 +201,40 @@ class NovaMainViewModel(application: Application) : AndroidViewModel(application
         _currentPrompt.value = trimmed
         _errorMessage.value = null
 
-        // Parse command intent
+        // Check if this is a compound multi-step command
+        val plan = superAgentEngine.createExecutionPlan(trimmed)
+        _latestExecutionPlanJson.value = plan.toJsonString()
+
+        if (plan.executionSteps.size > 1 || plan.executionSteps.any { it.action != "ai_assist" }) {
+            executeSuperAgentChain(plan)
+            return
+        }
+
+        // Single command intent
         val command = CommandParser.parse(trimmed)
         executeCommand(command, trimmed)
+    }
+
+    fun executeSuperAgentChain(plan: ExecutionPlan) {
+        activeJob?.cancel()
+        activeJob = viewModelScope.launch {
+            val executedPlan = superAgentEngine.executePlan(plan)
+            _latestExecutionPlanJson.value = executedPlan.toJsonString()
+            _latestResponse.value = executedPlan.feedbackMessage
+
+            database.taskDao().insert(
+                TaskExecutionEntity(
+                    query = plan.userCommand,
+                    intentType = plan.taskCategory,
+                    targetApp = "Multi-App System",
+                    stepsSummary = executedPlan.toJsonString(),
+                    status = "COMPLETED",
+                    resultMessage = executedPlan.feedbackMessage
+                )
+            )
+            saveConversation(plan.userCommand, executedPlan.feedbackMessage)
+            speakResponse(executedPlan.feedbackMessage)
+        }
     }
 
     private fun executeCommand(command: CommandIntent, originalInput: String) {
@@ -300,7 +386,8 @@ class NovaMainViewModel(application: Application) : AndroidViewModel(application
             val result = geminiRepo.askGemini(
                 prompt = prompt,
                 conversationHistory = history,
-                preferredLanguage = userPreferences.value.language
+                preferredLanguage = userPreferences.value.language,
+                model = userPreferences.value.selectedGeminiModel
             )
 
             result.onSuccess { responseText ->
@@ -346,18 +433,25 @@ class NovaMainViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun testApiConnection(keyToTest: String) {
+    fun testApiConnection(keyToTest: String, model: String? = null) {
         _isTestingApi.value = true
         _apiTestStatus.value = null
 
         viewModelScope.launch {
-            val result = geminiRepo.testConnection(keyToTest)
+            val targetModel = model ?: userPreferences.value.selectedGeminiModel
+            val result = geminiRepo.testConnection(keyToTest, targetModel)
             _isTestingApi.value = false
             result.onSuccess { msg ->
                 _apiTestStatus.value = "Success: $msg"
             }.onFailure { ex ->
                 _apiTestStatus.value = "Failed: ${ex.message}"
             }
+        }
+    }
+
+    fun setSelectedGeminiModel(modelId: String) {
+        viewModelScope.launch {
+            preferencesRepo.updateSelectedGeminiModel(modelId)
         }
     }
 

@@ -11,6 +11,8 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
+import com.example.data.network.gemini.GeminiModelCatalog
+
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "nova_preferences")
 
 data class UserPreferences(
@@ -25,7 +27,8 @@ data class UserPreferences(
     val overlayEnabled: Boolean = false,
     val onboardingCompleted: Boolean = false,
     val speechPlaybackEnabled: Boolean = true,
-    val quietHoursEnabled: Boolean = false
+    val quietHoursEnabled: Boolean = false,
+    val selectedGeminiModel: String = GeminiModelCatalog.DEFAULT_MODEL_ID
 )
 
 class NovaPreferencesRepository(private val context: Context) {
@@ -43,6 +46,7 @@ class NovaPreferencesRepository(private val context: Context) {
         val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
         val SPEECH_PLAYBACK_ENABLED = booleanPreferencesKey("speech_playback_enabled")
         val QUIET_HOURS_ENABLED = booleanPreferencesKey("quiet_hours_enabled")
+        val SELECTED_GEMINI_MODEL = stringPreferencesKey("selected_gemini_model")
     }
 
     val userPreferencesFlow: Flow<UserPreferences> = context.dataStore.data.map { preferences ->
@@ -58,7 +62,8 @@ class NovaPreferencesRepository(private val context: Context) {
             overlayEnabled = preferences[PreferencesKeys.OVERLAY_ENABLED] ?: false,
             onboardingCompleted = preferences[PreferencesKeys.ONBOARDING_COMPLETED] ?: false,
             speechPlaybackEnabled = preferences[PreferencesKeys.SPEECH_PLAYBACK_ENABLED] ?: true,
-            quietHoursEnabled = preferences[PreferencesKeys.QUIET_HOURS_ENABLED] ?: false
+            quietHoursEnabled = preferences[PreferencesKeys.QUIET_HOURS_ENABLED] ?: false,
+            selectedGeminiModel = preferences[PreferencesKeys.SELECTED_GEMINI_MODEL] ?: GeminiModelCatalog.DEFAULT_MODEL_ID
         )
     }
 
@@ -131,6 +136,12 @@ class NovaPreferencesRepository(private val context: Context) {
     suspend fun updateQuietHoursEnabled(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.QUIET_HOURS_ENABLED] = enabled
+        }
+    }
+
+    suspend fun updateSelectedGeminiModel(model: String) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.SELECTED_GEMINI_MODEL] = model.trim()
         }
     }
 
