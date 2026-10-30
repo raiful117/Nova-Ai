@@ -72,11 +72,13 @@ class ExampleUnitTest {
     @Test
     fun testGeminiModelCatalog() {
         val models = com.example.data.network.gemini.GeminiModelCatalog.AVAILABLE_MODELS
-        assertTrue(models.size >= 6)
+        assertTrue(models.size >= 8)
 
         // Verify key flagship & free tier models are present
         val modelIds = models.map { it.id }
         assertTrue(modelIds.contains("gemini-3.8-flash"))
+        assertTrue(modelIds.contains("gemini-3.5-flash-lite"))
+        assertTrue(modelIds.contains("gemini-4-argon"))
         assertTrue(modelIds.contains("gemini-2.5-flash"))
         assertTrue(modelIds.contains("gemini-2.5-pro"))
         assertTrue(modelIds.contains("gemini-2.0-flash"))
@@ -94,10 +96,13 @@ class ExampleUnitTest {
         )
         assertEquals("gemini-3.8-flash", defaultModel.id)
         assertEquals("Gemini 3.8 Flash", defaultModel.displayName)
-        assertTrue(defaultModel.tag.contains("Newest Flagship"))
+        assertTrue(defaultModel.tag.contains("Flagship"))
 
-        // Verify custom model fallback
-        val customModel = com.example.data.network.gemini.GeminiModelCatalog.findModel("gemini-custom-finetuned")
+        // Verify ultra-fast fallback model is defined
+        assertEquals("gemini-3.5-flash-lite", com.example.data.network.gemini.GeminiModelCatalog.ULTRA_FAST_FALLBACK_MODEL)
+
+        // Verify custom model fallback and models/ prefix stripping
+        val customModel = com.example.data.network.gemini.GeminiModelCatalog.findModel("models/gemini-custom-finetuned")
         assertEquals("gemini-custom-finetuned", customModel.id)
         assertEquals("Custom", customModel.tag)
     }
