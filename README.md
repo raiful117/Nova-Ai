@@ -1,5 +1,3 @@
-# Nova AI 🤖
-
 <div align="center">
 
 <img src="https://capsule-render.vercel.app/api?type=waving&color=gradient&customColorList=6,11,20&height=200&section=header&text=Nova%20AI&fontSize=80&fontColor=fff&animation=twinkling&fontAlignY=35&desc=Your%20Personal%20Jarvis%20%7C%20Built%20with%20%E2%9D%A4%EF%B8%8F&descAlignY=55&descSize=18" width="100%"/>
@@ -223,10 +221,10 @@
 
 ```bash
 # 1️⃣ Clone the repository
-git clone https://github.com/BcS-RaiFuL/nova-ai.git
+git clone https://github.com/raiful117/Nova-Ai.git
 
 # 2️⃣ Navigate into project
-cd nova-ai
+cd Nova-Ai
 
 # 3️⃣ Install Python dependencies
 pip install -r requirements.txt
@@ -411,7 +409,7 @@ nova-ai/
 
 ### 📊 Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=raiful117/Nova-ai&type=Date&theme=dark)](https://star-history.com/#BcS-RaiFuL/Nova-ai&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=raiful117/Nova-Ai&type=Date&theme=dark)](https://star-history.com/#BcS-RaiFuL/Nova-ai&Date)
 
 </div>
 
